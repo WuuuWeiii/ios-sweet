@@ -1,0 +1,65 @@
+diff --git a/osfmk/ipc/mach_msg.c b/osfmk/ipc/mach_msg.c
+--- a/osfmk/ipc/mach_msg.c
++++ b/osfmk/ipc/mach_msg.c
+@@ -97,6 +97,15 @@
+ #include <ipc/port.h>
+ #include <ipc/ipc_types.h>
+ #include <ipc/ipc_kmsg.h>
++
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++static bool
++sweet_mig_trapdbg(void)
++{
++	static int n;
++	return __atomic_fetch_add(&n, 1, __ATOMIC_RELAXED) < 16;
++}
++#endif
+ #include <ipc/ipc_mqueue.h>
+ #include <ipc/ipc_object.h>
+ #include <ipc/ipc_notify.h>
+@@ -961,6 +970,14 @@
+ mach_msg_overwrite_trap(
+ 	struct mach_msg_overwrite_trap_args *args)
+ {
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++	if (sweet_mig_trapdbg()) {
++		printf("SWEET MIG ow: msg=0x%llx opt=0x%x fs=0x%x rs=0x%x rn=0x%x\n",
++		    (uint64_t)args->msg, (unsigned)args->option,
++		    (unsigned)args->send_size, (unsigned)args->rcv_size,
++		    (unsigned)args->rcv_name);
++	}
++#endif
+ #if XNU_TARGET_OS_OSX || XNU_TARGET_OS_IOS
+ 	mach_msg_return_t       mr;
+ 	bool                    filter_nonfatal;
+@@ -1083,6 +1100,17 @@
+ mach_msg2_trap(
+ 	struct mach_msg2_trap_args *args)
+ {
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++	if (sweet_mig_trapdbg()) {
++		printf("SWEET MIG msg2: data=0x%llx opt=0x%llx mb_ss=0x%llx mr_lp=0x%llx mv_id=0x%llx dc_rn=0x%llx rs_pr=0x%llx\n",
++		    (uint64_t)args->data, (uint64_t)args->options,
++		    (uint64_t)args->msgh_bits_and_send_size,
++		    (uint64_t)args->msgh_remote_and_local_port,
++		    (uint64_t)args->msgh_voucher_and_id,
++		    (uint64_t)args->desc_count_and_rcv_name,
++		    (uint64_t)args->rcv_size_and_priority);
++	}
++#endif
+ 	mach_port_name_t rcv_name, sync_send;
+ 	mach_vm_address_t msg_addr, aux_addr;
+ 	mach_msg_size_t   msg_send_size, max_msg_rcv_size,
+diff --git a/osfmk/ipc/ipc_kmsg.c b/osfmk/ipc/ipc_kmsg.c
+--- a/osfmk/ipc/ipc_kmsg.c
++++ b/osfmk/ipc/ipc_kmsg.c
+@@ -4347,6 +4347,9 @@
+ 	if (sweet_migdbg()) {
+ 		printf("SWEET MIG invalid_reply: name=0x%x type=%d opts=0x%x strict=%d reply_entry=%p\n",
+ 		    reply_name, (int)reply_type, option32, (int)enforce_strict_reply, reply_entry);
++		printf("SWEET MIG invalid_reply: hdr bits=0x%x size=0x%x remote=%p local=%p id=0x%x\n",
++		    msg->msgh_bits, msg->msgh_size, (void *)msg->msgh_remote_port,
++		    (void *)msg->msgh_local_port, msg->msgh_id);
+ 	}
+ #endif
+ 	is_write_unlock(space);
