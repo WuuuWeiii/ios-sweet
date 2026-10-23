@@ -1,0 +1,53 @@
+diff --git a/osfmk/ipc/ipc_kmsg.c b/osfmk/ipc/ipc_kmsg.c
+--- a/osfmk/ipc/ipc_kmsg.c
++++ b/osfmk/ipc/ipc_kmsg.c
+@@ -107,6 +107,18 @@
+ #include <ipc/ipc_types.h>
+ #include <ipc/ipc_entry.h>
+ #include <ipc/ipc_kmsg.h>
++
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <pexpert/pexpert.h>
++static int sweet_migdbg_logs;
++static bool
++sweet_migdbg(void)
++{
++	uint32_t on = 0;
++	PE_parse_boot_argn("migdbg", &on, sizeof(on));
++	return on != 0 && __atomic_fetch_add(&sweet_migdbg_logs, 1, __ATOMIC_RELAXED) < 24;
++}
++#endif
+ #include <ipc/ipc_notify.h>
+ #include <ipc/ipc_object.h>
+ #include <ipc/ipc_space.h>
+@@ -3588,6 +3600,17 @@
+ 
+ 	kr = KERN_SUCCESS;
+ 
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++	if (sweet_migdbg()) {
++		printf("SWEET MIG qos: srp=%p name=0x%x special=%d dest=%p kobj=%d localtype=0x%x bits=0x%x\n",
++		    special_reply_port,
++		    IP_VALID(special_reply_port) ? (unsigned)hdr->msgh_local_port : 0xffffffffu,
++		    IP_VALID(special_reply_port) ? (int)special_reply_port->ip_specialreply : -1,
++		    dest_port, ip_is_kobject(dest_port),
++		    MACH_MSGH_BITS_LOCAL(hdr->msgh_bits), hdr->msgh_bits);
++	}
++#endif
++
+ 	if (IP_VALID(special_reply_port) &&
+ 	    special_reply_port->ip_specialreply &&
+ 	    !ip_is_kobject(dest_port) &&
+@@ -4320,6 +4343,12 @@
+ 	return MACH_MSG_SUCCESS;
+ 
+ invalid_reply:
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++	if (sweet_migdbg()) {
++		printf("SWEET MIG invalid_reply: name=0x%x type=%d opts=0x%x strict=%d reply_entry=%p\n",
++		    reply_name, (int)reply_type, option32, (int)enforce_strict_reply, reply_entry);
++	}
++#endif
+ 	is_write_unlock(space);
+ 
+ 	if (release_port != IP_NULL) {
