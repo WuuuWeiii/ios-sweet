@@ -1,0 +1,33 @@
+diff --git a/iokit/Kernel/arm/SweetCPU.cpp b/iokit/Kernel/arm/SweetCPU.cpp
+--- a/iokit/Kernel/arm/SweetCPU.cpp
++++ b/iokit/Kernel/arm/SweetCPU.cpp
+@@ -67,14 +67,25 @@
+ 
+ 	if (logical == NULL || reg == NULL || reg->getLength() != sizeof(uint32_t) ||
+ 	    logical->unsigned32BitValue() >= topology->num_cpus) {
++		IOLog("SWEET CPU: nub rejected: logical=%p reg=%p num_cpus=%u\n",
++		    logical, reg, topology->num_cpus);
+ 		return false;
+ 	}
+ 	const ml_topology_cpu_t *cpu = &topology->cpus[logical->unsigned32BitValue()];
+ 	if (*(const uint32_t *)reg->getBytesNoCopy() != cpu->phys_id) {
+-		return false;
+-	}
+-	/* MPIDR Aff1 = core: 0x000-0x500 A55, 0x600/0x700 A76 */
+-	if (cpu->phys_id > 0x700 || (cpu->phys_id & 0xff) != 0 ||
++		IOLog("SWEET CPU: nub rejected: cpu=%u reg=0x%x topology phys_id=0x%x\n",
++		    cpu->cpu_id, *(const uint32_t *)reg->getBytesNoCopy(), cpu->phys_id);
++		return false;
++	}
++	/*
++	 * SDM845 puts the core number in MPIDR Aff1 (0x000-0x500 A55,
++	 * 0x600/0x700 A76), i.e. phys_id = core << 8. QEMU's virt machine uses
++	 * the flat Aff0 layout (phys_id = core), which is useful for verifying
++	 * this driver's PSCI path without hardware. Accept both.
++	 */
++	bool aff1_layout = (cpu->phys_id & 0xff) == 0;
++	bool flat_layout = (cpu->phys_id < 0x100);
++	if (cpu->phys_id > 0x700 || (!aff1_layout && !flat_layout) ||
+ 	    topology->num_cpus > SWEET_SMP_MAX_CPUS) {
+ 		panic("SWEET CPU: invalid topology cpu=%u mpidr=0x%x count=%u",
+ 		    cpu->cpu_id, cpu->phys_id, topology->num_cpus);
