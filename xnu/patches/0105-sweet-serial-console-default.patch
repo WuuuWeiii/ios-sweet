@@ -1,0 +1,22 @@
+diff --git a/osfmk/console/serial_console.c b/osfmk/console/serial_console.c
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -188,6 +188,18 @@
+ {
+ 	if (console_ring.len != 0) {
+ 		return;
++	}
++
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++	/*
++	 * SWEET/POLARIS bring-up has no AppleCLCD video console driver, but
++	 * cons_ops_index defaults to VC_CONS_OPS: printf(), console_write() and
++	 * /dev/console writes then go to an uninitialised video console and are
++	 * dropped. The platform's fbcon is registered through pe_serial, i.e. as
++	 * the serial backend, so select SERIAL_CONS_OPS here.
++	 */
++	cons_ops_index = SERIAL_CONS_OPS;
++#endif
+ 	}
+ 
+ 	kmem_alloc(kernel_map, (vm_offset_t *)&console_ring.buffer,
