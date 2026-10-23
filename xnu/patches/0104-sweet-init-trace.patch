@@ -1,0 +1,49 @@
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -6879,9 +6879,13 @@
+ 	mach_vm_offset_t scratch_addr = 0;
+ 	mach_vm_size_t map_page_size = vm_map_page_size(map);
+ 
++	kprintf("SWEET-INIT: load_init_program enter\n");
+ 	(void) mach_vm_allocate_kernel(map, &scratch_addr, map_page_size, VM_FLAGS_ANYWHERE, VM_KERN_MEMORY_NONE);
++	kprintf("SWEET-INIT: scratch page ok\n");
+ #if CONFIG_MEMORYSTATUS
++	kprintf("SWEET-INIT: memorystatus snapshot...\n");
+ 	(void) memorystatus_init_at_boot_snapshot();
++	kprintf("SWEET-INIT: memorystatus snapshot done\n");
+ #endif /* CONFIG_MEMORYSTATUS */
+ 
+ #if DEBUG || DEVELOPMENT
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1086,7 +1086,9 @@
+ 	mac_cred_label_associate_user(proc_ucred(p));
+ #endif
+ 
++	kprintf("SWEET-INIT: vm_init_before_launchd...\n");
+ 	vm_init_before_launchd();
++	kprintf("SWEET-INIT: vm_init_before_launchd done\n");
+ 
+ #if CONFIG_XNUPOST
+ 	int result = bsd_list_tests();
+@@ -1098,6 +1100,7 @@
+ 
+ 	bsd_init_kprintf("bsd_do_post - done");
+ 
++	kprintf("SWEET-INIT: bsdinit_task calling load_init_program\n");
+ 	load_init_program(p);
+ 	lock_trace = 1;
+ }
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -813,6 +813,7 @@
+ #ifdef  MACH_BSD
+ 	sweet_trace("T7 calling bsd_init");
+ 	bsd_init();
++	kprintf("SWEET: bsd_init returned to kernel_bootstrap\n");
+ #endif
+ 
+ 
