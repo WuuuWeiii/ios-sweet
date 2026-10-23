@@ -1,0 +1,15 @@
+diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -77,6 +77,11 @@
+     "     'IONameMatch'     = 'sweet,display';"
+     "   },"
+     "   {"
++    "     'IOClass'         = AppleCLCD;"
++    "     'IOProviderClass' = IOPlatformDevice;"
++    "     'IONameMatch'     = 'polaris,display';"
++    "   },"
++    "   {"
+     "     'IOClass'         = SweetHIDButtons;"
+     "     'IOProviderClass' = IOResources;"
+     "     'IOMatchCategory' = SweetHIDButtons;"
