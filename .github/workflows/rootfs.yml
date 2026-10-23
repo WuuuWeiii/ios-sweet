@@ -1,0 +1,36 @@
+name: rootfs
+
+on:
+  workflow_dispatch:
+    inputs:
+      size_mb:
+        description: size of the HFS+ root image in MiB
+        default: "32"
+
+jobs:
+  hfs-root:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decode the custom init (PID 1)
+        run: |
+          base64 -D < tools/sweet-init.b64 > "$RUNNER_TEMP/sweet-init"
+          chmod +x "$RUNNER_TEMP/sweet-init"
+          file "$RUNNER_TEMP/sweet-init"
+          ls -l "$RUNNER_TEMP/sweet-init"
+
+      - name: Build the HFS+ root volume
+        run: |
+          chmod +x tools/mkhfsroot.sh
+          sudo bash tools/mkhfsroot.sh "$RUNNER_TEMP/root-hfs.raw" "${{ inputs.size_mb }}" "$RUNNER_TEMP/sweet-init"
+          ls -l "$RUNNER_TEMP/root-hfs.raw"
+          shasum -a 256 "$RUNNER_TEMP/root-hfs.raw"
+
+      - name: Upload root image
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweet-root-hfs
+          path: ${{ runner.temp }}/root-hfs.raw
+          if-no-files-found: error
