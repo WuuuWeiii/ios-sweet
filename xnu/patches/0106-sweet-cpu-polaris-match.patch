@@ -1,0 +1,19 @@
+diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -47,6 +47,15 @@
+     "     'IONameMatch'     = 'qcom,kryo470';"
+     "     'IOProbeScore'    = 10000:32;"
+     "   },"
++    /* POLARIS (Mi Mix 2S, SDM845 Kryo 385): same platform CPU driver. Without
++     * this entry the driver never matches, PE_cpu_start() is never reached and
++     * the secondary CPUs are never brought up. */
++    "   {"
++    "     'IOClass'         = SweetCPU;"
++    "     'IOProviderClass' = IOPlatformDevice;"
++    "     'IONameMatch'     = 'qcom,kryo385';"
++    "     'IOProbeScore'    = 10000:32;"
++    "   },"
+     "   {"
+     "     'IOClass'         = AppleKeyStore;"
+     "     'IOProviderClass' = IOResources;"
