@@ -1,0 +1,152 @@
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -292,6 +292,33 @@
+ 	return ufs_scsi(cdb, sizeof(cdb), count * UFS_BLOCK, true);
+ }
+ 
++/*
++ * SWEET debug mailbox.  The persistent userdata log is invisible without a
++ * recovery, so with boot-arg ufsdbg=1 the kernel copies its latest console
++ * bytes to the "oops" GPT partition (4 KiB blocks 4096..8191) and, after
++ * `sweetreset` seconds, resets the SoC.  TWRP (flashed to the boot partition)
++ * then comes up by itself and `adb` can pull the bytes.
++ */
++#define SWEET_DBG_FIRST_BLOCK   4096u
++#define SWEET_DBG_LAST_BLOCK    8191u
++#define SWEET_DBG_RING_BYTES    (256u << 10)
++
++static int
++ufs_write_blocks_raw(uint64_t lba, uint32_t count)
++{
++	if (!su.writable || count == 0 || count > BOUNCE_SIZE / UFS_BLOCK ||
++	    lba < SWEET_DBG_FIRST_BLOCK ||
++	    lba + count - 1 > SWEET_DBG_LAST_BLOCK || lba + count - 1 > UINT32_MAX) {
++		return EPERM;
++	}
++	uint8_t cdb[10] = {
++		0x2a, 0,
++		(uint8_t)(lba >> 24), (uint8_t)(lba >> 16), (uint8_t)(lba >> 8), (uint8_t)lba,
++		0, (uint8_t)(count >> 8), (uint8_t)count, 0
++	};
++	return ufs_scsi(cdb, sizeof(cdb), count * UFS_BLOCK, true);
++}
++
+ static int
+ ufs_sync_cache(void)
+ {
+@@ -736,12 +763,92 @@
+ 	uint64_t total, seq;
+ };
+ 
++struct sweet_dbg_mailbox {
++	char magic[8];                  /* "SWEETDBG" */
++	uint32_t version;
++	uint32_t log_error;             /* last userdata-log write error */
++	uint64_t log_total;             /* console bytes recorded */
++	uint64_t log_seq;               /* successful flushes */
++	uint64_t log_base;              /* computed userdata log area base */
++	uint64_t part_first, part_nblocks;
++	uint64_t writable;
++	uint64_t ring_dump_bytes;
++};
++
++static int sweet_dbg_log_error;
++static uint64_t sweet_dbg_log_seq;
++
++/* Copy the newest console bytes to the oops partition.  Caller may hold no
++ * locks; this takes sweet_ufs_lock itself. */
++static void
++sweet_dbg_dump(void)
++{
++	struct sweet_dbg_mailbox mb;
++	uint64_t total = os_atomic_load(&sweet_log_total, relaxed);
++	void *bounce = (void *)(su.dma + DMA_BOUNCE);
++
++	bzero(&mb, sizeof(mb));
++	memcpy(mb.magic, "SWEETDBG", 8);
++	mb.version = 1;
++	mb.log_error = (uint32_t)sweet_dbg_log_error;
++	mb.log_total = total;
++	mb.log_seq = sweet_dbg_log_seq;
++	mb.log_base = su.first_block + su.nblocks - SWEET_LOG_BLOCKS;
++	mb.part_first = su.first_block;
++	mb.part_nblocks = su.nblocks;
++	mb.writable = su.writable ? 1 : 0;
++	uint64_t nbytes = MIN((uint64_t)SWEET_DBG_RING_BYTES, total);
++	mb.ring_dump_bytes = nbytes;
++
++	uint64_t start = total - nbytes;
++	uint32_t nblk = (uint32_t)((nbytes + UFS_BLOCK - 1) / UFS_BLOCK);
++
++	lck_mtx_lock(&sweet_ufs_lock);
++	bzero(bounce, UFS_BLOCK);
++	memcpy(bounce, &mb, sizeof(mb));
++	(void)ufs_write_blocks_raw(SWEET_DBG_FIRST_BLOCK, 1);
++	for (uint32_t i = 0; i < nblk; i++) {
++		bzero(bounce, UFS_BLOCK);
++		for (uint32_t j = 0; j < UFS_BLOCK; j++) {
++			uint64_t at = start + (uint64_t)i * UFS_BLOCK + j;
++			((char *)bounce)[j] = at < total ? sweet_log_ring[at % SWEET_LOG_SIZE] : 0;
++		}
++		(void)ufs_write_blocks_raw(SWEET_DBG_FIRST_BLOCK + 1 + i, 1);
++	}
++	lck_mtx_unlock(&sweet_ufs_lock);
++}
++
++static void
++sweet_psci_system_reset(void)
++{
++	register uint64_t x0 __asm__("x0") = 0x84000009ULL;      /* SYSTEM_RESET */
++	register uint64_t x1 __asm__("x1") = 0x1;
++	register uint64_t x2 __asm__("x2") = 0;
++	__asm__ volatile("smc #0" : "+r"(x0), "+r"(x1), "+r"(x2) : :
++	    "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12",
++	    "x13", "x14", "x15", "x16", "x17", "cc", "memory");
++	for (;;) {
++		__asm__ volatile("wfe");
++	}
++}
++
+ static void
+ sweet_log_thread(__unused void *arg, __unused wait_result_t wr)
+ {
+ 	uint64_t base = su.first_block + su.nblocks - SWEET_LOG_BLOCKS;
+ 	uint64_t flushed = 0, seq = 0;
+ 	void *bounce = (void *)(su.dma + DMA_BOUNCE);
++	uint32_t dbg = 0, reset_after = 0;
++	uint64_t reset_deadline = 0;
++	PE_parse_boot_argn("ufsdbg", &dbg, sizeof(dbg));
++	PE_parse_boot_argn("sweetreset", &reset_after, sizeof(reset_after));
++	if (dbg && reset_after == 0) {
++		reset_after = 120;
++	}
++	if (dbg && reset_after) {
++		nanoseconds_to_absolutetime((uint64_t)reset_after * 1000000000ULL, &reset_deadline);
++		reset_deadline += mach_absolute_time();
++	}
+ 
+ 	printf("SWEET LOG: console log to the last %u KiB of the partition (block 0x%llx)\n",
+ 	    SWEET_LOG_BLOCKS * UFS_BLOCK >> 10, base);
+@@ -780,9 +887,20 @@
+ 		lck_mtx_unlock(&sweet_ufs_lock);
+ 		if (error) {
+ 			printf("SWEET LOG: write failed (%d), stopping\n", error);
+-			return;
++			sweet_dbg_log_error = error;
++		} else {
++			sweet_dbg_log_seq = seq;
+ 		}
+ 		flushed = total;
++		if (dbg) {
++			sweet_dbg_dump();
++			if (reset_deadline && mach_absolute_time() > reset_deadline) {
++				printf("SWEET DBG: auto reset after %u s\n", reset_after);
++				sweet_dbg_dump();
++				(void)ufs_sync_cache();
++				sweet_psci_system_reset();
++			}
++		}
+ 	}
+ }
+ 
