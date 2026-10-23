@@ -1,0 +1,21 @@
+diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
+--- a/osfmk/kern/exception.c
++++ b/osfmk/kern/exception.c
+@@ -857,6 +857,17 @@
+ 	printf("CRASH %s pc 0x%llx lr 0x%llx sp 0x%llx fp 0x%llx far 0x%llx\n", name,
+ 	    get_saved_state_pc(ss), get_saved_state_lr(ss), get_saved_state_sp(ss), fp,
+ 	    (uint64_t)saved_state64(ss)->far);
++	/* libpthread fatal thunks keep the failing call's errno in x8/w0. */
++	for (int r = 0; r < 29; r += 8) {
++		printf("CRASH %s r%d %llx %llx %llx %llx %llx %llx %llx %llx\n", name, r,
++		    (uint64_t)saved_state64(ss)->x[r + 0], (uint64_t)saved_state64(ss)->x[r + 1],
++		    (uint64_t)saved_state64(ss)->x[r + 2], (uint64_t)saved_state64(ss)->x[r + 3],
++		    (uint64_t)saved_state64(ss)->x[r + 4], (uint64_t)saved_state64(ss)->x[r + 5],
++		    (uint64_t)saved_state64(ss)->x[r + 6], (uint64_t)saved_state64(ss)->x[r + 7]);
++	}
++	printf("CRASH %s r28 %llx cpsr 0x%x esr 0x%x\n", name,
++	    (uint64_t)saved_state64(ss)->x[28], saved_state64(ss)->cpsr,
++	    saved_state64(ss)->esr);
+ 
+ 	char line[200];
+ 	int n = snprintf(line, sizeof(line), "CRASH %s bt", name);
