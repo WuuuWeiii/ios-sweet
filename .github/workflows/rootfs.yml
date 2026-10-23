@@ -25,6 +25,9 @@ jobs:
         run: |
           chmod +x tools/mkhfsroot.sh
           sudo bash tools/mkhfsroot.sh "$RUNNER_TEMP/root-hfs.raw" "${{ inputs.size_mb }}" "$RUNNER_TEMP/sweet-init"
+          # mkhfsroot.sh runs as root and leaves the image mode 600; the rest of
+          # the job (and the artifact uploader) runs as the runner user.
+          sudo chmod 644 "$RUNNER_TEMP/root-hfs.raw"
           ls -l "$RUNNER_TEMP/root-hfs.raw"
           shasum -a 256 "$RUNNER_TEMP/root-hfs.raw"
 
