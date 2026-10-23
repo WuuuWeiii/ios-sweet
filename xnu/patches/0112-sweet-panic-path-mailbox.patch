@@ -1,0 +1,79 @@
+diff --git a/osfmk/kern/debug.c b/osfmk/kern/debug.c
+--- a/osfmk/kern/debug.c
++++ b/osfmk/kern/debug.c
+@@ -1077,6 +1077,21 @@
+ 	sweet_early_panic(panic_format_str, panic_args);
+ #endif
+ 
++#if defined(SWEET)
++	/*
++	 * Unattended testing: with boot-arg ufsdbg=1 copy the console ring (it
++	 * holds the initproc CRASH register/backtrace lines) to the recovery
++	 * mailbox and reset the SoC.  Must run this early: the panic halts the
++	 * other CPUs, so a timer thread can no longer do it.
++	 */
++	{
++		extern void sweet_dbg_panic_dump(void) __attribute__((weak));
++		if (sweet_dbg_panic_dump != 0) {
++			sweet_dbg_panic_dump();
++		}
++	}
++#endif
++
+ #if defined(__x86_64__) && (DEVELOPMENT || DEBUG)
+ 	read_lbr();
+ #endif
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -777,9 +777,10 @@
+ 
+ static int sweet_dbg_log_error;
+ static uint64_t sweet_dbg_log_seq;
++static int sweet_dbg_in_panic;
+ 
+ /* Copy the newest console bytes to the oops partition.  Caller may hold no
+- * locks; this takes sweet_ufs_lock itself. */
++ * locks; this takes sweet_ufs_lock itself unless called from panic context. */
+ static void
+ sweet_dbg_dump(void)
+ {
+@@ -803,7 +804,9 @@
+ 	uint64_t start = total - nbytes;
+ 	uint32_t nblk = (uint32_t)((nbytes + UFS_BLOCK - 1) / UFS_BLOCK);
+ 
+-	lck_mtx_lock(&sweet_ufs_lock);
++	if (!sweet_dbg_in_panic) {
++		lck_mtx_lock(&sweet_ufs_lock);
++	}
+ 	bzero(bounce, UFS_BLOCK);
+ 	memcpy(bounce, &mb, sizeof(mb));
+ 	(void)ufs_write_blocks_raw(SWEET_DBG_FIRST_BLOCK, 1);
+@@ -815,7 +818,9 @@
+ 		}
+ 		(void)ufs_write_blocks_raw(SWEET_DBG_FIRST_BLOCK + 1 + i, 1);
+ 	}
+-	lck_mtx_unlock(&sweet_ufs_lock);
++	if (!sweet_dbg_in_panic) {
++		lck_mtx_unlock(&sweet_ufs_lock);
++	}
+ }
+ 
+ static void
+@@ -827,6 +832,8 @@
+ 	__asm__ volatile("smc #0" : "+r"(x0), "+r"(x1), "+r"(x2) : :
+ 	    "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12",
+ 	    "x13", "x14", "x15", "x16", "x17", "cc", "memory");
++	/* SMC reset should not return; fall back to the platform expert. */
++	PEHaltRestart(kPERestartCPU);
+ 	for (;;) {
+ 		__asm__ volatile("wfe");
+ 	}
+@@ -842,6 +849,7 @@
+ 	if (!dbg) {
+ 		return;
+ 	}
++	sweet_dbg_in_panic = 1;
+ 	sweet_dbg_log_error = ECANCELED;        /* marker: panic-time dump */
+ 	sweet_dbg_dump();
+ 	(void)ufs_sync_cache();
