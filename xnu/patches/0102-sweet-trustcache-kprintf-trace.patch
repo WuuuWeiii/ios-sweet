@@ -1,0 +1,86 @@
+diff --git a/bsd/kern/kern_trustcache.c b/bsd/kern/kern_trustcache.c
+--- a/bsd/kern/kern_trustcache.c
++++ b/bsd/kern/kern_trustcache.c
+@@ -257,7 +257,8 @@
+ 	 */
+ 	trust_cache_rt = NULL;
+ 	trust_cache_mut_rt = NULL;
+-	printf("SWEET: trust caches unavailable (Image4/AMFI not installed)\n");
++	kprintf("SWEET: trust caches unavailable (Image4/AMFI not installed)\n");
++	kprintf("SWEET: trust_cache_runtime_init done\n");
+ 	return;
+ #endif
+ 
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -419,6 +419,24 @@
+ 	startup_phase = upto;
+ }
+ 
++
++/*
++ * SWEET bring-up tracing: lock-free console writes that do not go through
++ * kprintf()/os_log, so they still appear when the normal console path blocks.
++ */
++extern void console_write_unbuffered(char c);
++
++static void
++sweet_trace(const char *tag)
++{
++	console_write_unbuffered('[');
++	while (*tag) {
++		console_write_unbuffered(*tag++);
++	}
++	console_write_unbuffered(']');
++	console_write_unbuffered('\n');
++}
++
+ void
+ kernel_bootstrap(void)
+ {
+@@ -736,12 +754,15 @@
+ 
+ #ifndef BCM2837
+ 	kernel_bootstrap_log("trust_cache_init");
++	sweet_trace("T1 before tc_init");
+ 
+ 	/* Initialize the runtime for the trust cache interface */
+ 	trust_cache_runtime_init();
++	sweet_trace("T2 after tc_init");
+ 
+ 	/* Load the static and engineering trust caches */
+ 	load_static_trust_cache();
++	sweet_trace("T3 after tc_load");
+ #endif
+ 
+ 	kernel_startup_initialize_upto(STARTUP_SUB_LOCKDOWN);
+@@ -753,10 +774,12 @@
+ 	 * the static KVA mappings used for the jettisoned bootstrap segments.
+ 	 */
+ 	kernel_bootstrap_log("OSKextRemoveKextBootstrap");
++	sweet_trace("T4 before kextremove");
+ 	OSKextRemoveKextBootstrap();
+ 
+ 	/* No changes to kernel text and rodata beyond this point. */
+ 	kernel_bootstrap_log("machine_lockdown");
++	sweet_trace("T5 before lockdown");
+ 	machine_lockdown();
+ 
+ #ifdef CONFIG_XNUPOST
+@@ -771,6 +794,7 @@
+ #ifdef  IOKIT
+ 	kernel_bootstrap_log("PE_lockdown_iokit");
+ 	PE_lockdown_iokit();
++	sweet_trace("T6 after iokit lockdown");
+ #endif
+ 	/*
+ 	 * max_cpus must be nailed down by the time PE_lockdown_iokit() finishes,
+@@ -787,6 +811,7 @@
+ 	 *	Start the user bootstrap.
+ 	 */
+ #ifdef  MACH_BSD
++	sweet_trace("T7 calling bsd_init");
+ 	bsd_init();
+ #endif
+ 
