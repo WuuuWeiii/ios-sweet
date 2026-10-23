@@ -1,0 +1,41 @@
+diff --git a/bsd/kern/kern_trustcache.c b/bsd/kern/kern_trustcache.c
+--- a/bsd/kern/kern_trustcache.c
++++ b/bsd/kern/kern_trustcache.c
+@@ -250,17 +250,15 @@
+ 
+ #if defined(SWEET)
+ 	/*
+-	 * Standalone SWEET bring-up has no AppleImage4/AMFI kexts. Represent
+-	 * the missing service explicitly: no caches can be loaded or matched.
+-	 * Keep a NULL runtime through lockdown rather than a partially
+-	 * initialized runtime that would later dereference absent callbacks.
++	 * Standalone SWEET/POLARIS bring-up has no AppleImage4, no AMFI kext and
++	 * no PPL monitor. trustCacheInitializeRuntime() waits for state that only
++	 * those provide, so take the explicit "unavailable" path unconditionally:
++	 * keep a NULL runtime through lockdown instead of a half-initialized one.
+ 	 */
+-	if (img4if == NULL || amfi == NULL) {
+-		trust_cache_rt = NULL;
+-		trust_cache_mut_rt = NULL;
+-		printf("SWEET: trust caches unavailable (Image4/AMFI not installed)\n");
+-		return;
+-	}
++	trust_cache_rt = NULL;
++	trust_cache_mut_rt = NULL;
++	printf("SWEET: trust caches unavailable (Image4/AMFI not installed)\n");
++	return;
+ #endif
+ 
+ 	/* Image4 interface needs to be available */
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -490,7 +490,7 @@
+ 	platform_stall_panic_or_spin(PLATFORM_STALL_XNU_LOCATION_BSD_INIT);
+ #endif
+ 
+-#define DEBUG_BSDINIT 0
++#define DEBUG_BSDINIT 1
+ 
+ #if DEBUG_BSDINIT
+ #define bsd_init_kprintf(x, ...) kprintf("bsd_init: " x, ## __VA_ARGS__)
