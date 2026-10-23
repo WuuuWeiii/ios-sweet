@@ -1,0 +1,23 @@
+diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
+--- a/osfmk/kern/exception.c
++++ b/osfmk/kern/exception.c
+@@ -857,6 +857,19 @@
+ 	printf("SWEET TSD: crash cthread_self=0x%llx is64=%d task_flags=0x%x\n",
+ 	    (uint64_t)thread->machine.cthread_self, (int)thread_is_64bit_addr(thread),
+ 	    (unsigned)task->t_flags);
++	{
++		uint64_t tsd = (uint64_t)thread->machine.cthread_self;
++		uint64_t words[64];
++		if (tsd != 0 && copyin((user_addr_t)tsd, words, sizeof(words)) == 0) {
++			printf("SWEET TSD: dump base=0x%llx\n", tsd);
++			for (int i = 0; i < 64; i += 4) {
++				printf("SWEET TSD: +%02x: %016llx %016llx %016llx %016llx\n",
++				    i * 8, words[i], words[i + 1], words[i + 2], words[i + 3]);
++			}
++		} else {
++			printf("SWEET TSD: dump failed for 0x%llx\n", tsd);
++		}
++	}
+ 	printf("CRASH %s pc 0x%llx lr 0x%llx sp 0x%llx fp 0x%llx far 0x%llx\n", name,
+ 	    get_saved_state_pc(ss), get_saved_state_lr(ss), get_saved_state_sp(ss), fp,
+ 	    (uint64_t)saved_state64(ss)->far);
