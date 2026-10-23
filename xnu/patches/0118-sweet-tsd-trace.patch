@@ -1,0 +1,44 @@
+diff --git a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -2218,11 +2218,15 @@
+ 	case 2:
+ 		/* set cthread */
+ 		platform_syscall_kprintf("set cthread self.\n");
++		printf("SWEET TSD: platform_syscall set cthread 0x%llx\n",
++		    (uint64_t)get_saved_state_reg(state, 0));
+ 		thread_set_cthread_self(get_saved_state_reg(state, 0));
+ 		break;
+ 	case 3:
+ 		/* get cthread */
+ 		platform_syscall_kprintf("get cthread self.\n");
++		printf("SWEET TSD: platform_syscall get cthread -> 0x%llx\n",
++		    (uint64_t)thread_get_cthread_self());
+ 		set_saved_state_reg(state, 0, thread_get_cthread_self());
+ 		break;
+ 	case 0: /* I-Cache flush (removed) */
+diff --git a/osfmk/kern/thread_act.c b/osfmk/kern/thread_act.c
+--- a/osfmk/kern/thread_act.c
++++ b/osfmk/kern/thread_act.c
+@@ -448,6 +448,8 @@
+ 	if (thread == THREAD_NULL) {
+ 		return KERN_INVALID_ARGUMENT;
+ 	}
++	printf("SWEET TSD: thread_set_tsd_base(thread=%p base=0x%llx)\n",
++	    (void *)thread, (uint64_t)tsd_base);
+ 
+ 	thread_mtx_lock(thread);
+ 
+diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
+--- a/osfmk/kern/exception.c
++++ b/osfmk/kern/exception.c
+@@ -854,6 +854,9 @@
+ 		return;
+ 	}
+ 	uint64_t fp = get_saved_state_fp(ss);
++	printf("SWEET TSD: crash cthread_self=0x%llx is64=%d task_flags=0x%x\n",
++	    (uint64_t)thread->machine.cthread_self, (int)thread_is_64bit_addr(thread),
++	    (unsigned)task->t_flags);
+ 	printf("CRASH %s pc 0x%llx lr 0x%llx sp 0x%llx fp 0x%llx far 0x%llx\n", name,
+ 	    get_saved_state_pc(ss), get_saved_state_lr(ss), get_saved_state_sp(ss), fp,
+ 	    (uint64_t)saved_state64(ss)->far);
