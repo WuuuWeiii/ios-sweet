@@ -1,0 +1,46 @@
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -832,6 +832,25 @@
+ 	}
+ }
+ 
++/* Called from sweet_early_panic(); must not rely on other CPUs or locks. */
++void
++sweet_dbg_panic_dump(void)
++{
++	uint32_t dbg = 0, reset = 1;
++
++	PE_parse_boot_argn("ufsdbg", &dbg, sizeof(dbg));
++	if (!dbg) {
++		return;
++	}
++	sweet_dbg_log_error = ECANCELED;        /* marker: panic-time dump */
++	sweet_dbg_dump();
++	(void)ufs_sync_cache();
++	PE_parse_boot_argn("panicreset", &reset, sizeof(reset));
++	if (reset) {
++		sweet_psci_system_reset();
++	}
++}
++
+ static void
+ sweet_log_thread(__unused void *arg, __unused wait_result_t wr)
+ {
+diff --git a/osfmk/arm64/sweet_early.c b/osfmk/arm64/sweet_early.c
+--- a/osfmk/arm64/sweet_early.c
++++ b/osfmk/arm64/sweet_early.c
+@@ -123,6 +123,13 @@
+ 	va_end(copy);
+ 	sweet_early_putc('\n');
+ 	__asm__ volatile("dsb sy" ::: "memory");
++
++	/* With boot-arg ufsdbg=1, hand the console ring to the recovery
++	 * mailbox and reset the SoC so the test can continue unattended. */
++	extern void sweet_dbg_panic_dump(void) __attribute__((weak));
++	if (sweet_dbg_panic_dump != 0) {
++		sweet_dbg_panic_dump();
++	}
+ }
+ 
+ void
