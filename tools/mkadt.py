@@ -67,7 +67,7 @@ MACHINES = {
         ufs=0x01d84000, ufs_size=0x2500,
         timebase=19200000, vtimer_intid=19,
         canvas_w=1080, canvas_h=2160,
-        compatible=('D22AP', 'iPhone10,3', 'xiaomi,polaris', 'qcom,sdm845', 'AppleARM'),
+        compatible=('D22AP', 'iPhone10,3', 'xiaomi,sweet', 'xiaomi,polaris', 'qcom,sdm845', 'AppleARM'),
         model=b'iPhone10,3', target_type=b'D22', target_sub=b'D22AP',
         io_devtype=b'polaris-io', io_compat=b'polaris-io',
         cpu_compat=('qcom,kryo385', 'ARM,v8'),
@@ -153,13 +153,18 @@ def build(machine='polaris', qemu=False, highmem=False):
     # homogeneous cluster (board_config MAX_CPU_CLUSTERS=1). SMP bring-up uses
     # the same scheme SWEET booted with; revisit only with a 2-cluster ADT.
     cpu_nodes = []
-    for core in range(1 if qemu else 8):
+    # SWEET_CPUS overrides the CPU count (bring-up: QEMU can boot with 8 CPUs
+    # to exercise the PSCI CPU_ON path). QEMU's virt machine numbers CPUs in
+    # MPIDR Aff0 (reg = core); SDM845 uses Aff1 (reg = core << 8).
+    import os as _os
+    n_cpus = int(_os.environ.get('SWEET_CPUS', '1' if qemu else '8'))
+    for core in range(n_cpus):
         big = (core < 4) if m['big_first'] else (core >= (8 - 4))
         cpu_nodes.append(node(f'cpu{core}', [
             ph(),
             ('device_type', cstr('cpu')),
             ('compatible', strlist(*m['cpu_compat'])),
-            ('reg', u32(core << 8)),
+            ('reg', u32(core if qemu else (core << 8))),
             ('cpu-id', u32(core)),
             ('cluster-id', u32(0)),
             ('cluster-type', u32(0)),
