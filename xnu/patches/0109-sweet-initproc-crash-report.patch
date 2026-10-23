@@ -1,0 +1,37 @@
+diff --git a/bsd/kern/kern_exit.c b/bsd/kern/kern_exit.c
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -1849,6 +1849,19 @@
+ 		proc_handle_critical_exit(p, rv);
+ 	}
+ 
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++	/*
++	 * SWEET: always dump the initproc's crash registers and user backtrace.
++	 * The corpse path below can be skipped (e.g. PT_DENY_ATTACH), and launchd
++	 * dying with SIGTRAP otherwise leaves no symbolication data at all.
++	 */
++	if (p == initproc && p == current_proc()) {
++		extern void sweet_crash_log(const char *, int, int, uint64_t, uint64_t);
++		sweet_crash_log(p->p_comm, proc_getpid(p), WTERMSIG(rv),
++		    ((uint64_t)ut->uu_exception << 32) | (uint32_t)ut->uu_code, ut->uu_subcode);
++	}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
++
+ 	/*
+ 	 * Generate a corefile/crashlog if:
+ 	 *      The process doesn't have an exit reason that indicates no crash report should be created
+diff --git a/osfmk/vm/vm_shared_region.c b/osfmk/vm/vm_shared_region.c
+--- a/osfmk/vm/vm_shared_region.c
++++ b/osfmk/vm/vm_shared_region.c
+@@ -137,7 +137,9 @@
+ int shared_region_version = 3;
+ 
+ /* trace level, output is sent to the system log file */
+-int shared_region_trace_level = SHARED_REGION_TRACE_ERROR_LVL;
++/* SWEET: silent by default; the per-cache-file trust-cache errors flood
++ * the small console. `sysctl vm.shared_region_trace_level=1` re-enables. */
++int shared_region_trace_level = SHARED_REGION_TRACE_NONE_LVL;
+ 
+ /* should local (non-chroot) shared regions persist when no task uses them ? */
+ int shared_region_persistence = 0;      /* no by default */
