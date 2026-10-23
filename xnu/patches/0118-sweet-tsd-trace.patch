@@ -20,15 +20,16 @@ diff --git a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
 diff --git a/osfmk/kern/thread_act.c b/osfmk/kern/thread_act.c
 --- a/osfmk/kern/thread_act.c
 +++ b/osfmk/kern/thread_act.c
-@@ -448,6 +448,8 @@
- 	if (thread == THREAD_NULL) {
- 		return KERN_INVALID_ARGUMENT;
- 	}
+@@ -1015,6 +1015,9 @@
+ 	mach_vm_offset_t        tsd_base)
+ {
+ 	kern_return_t           result = KERN_SUCCESS;
++
 +	printf("SWEET TSD: thread_set_tsd_base(thread=%p base=0x%llx)\n",
 +	    (void *)thread, (uint64_t)tsd_base);
  
- 	thread_mtx_lock(thread);
- 
+ 	if (thread == THREAD_NULL) {
+ 		return KERN_INVALID_ARGUMENT;
 diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 --- a/osfmk/kern/exception.c
 +++ b/osfmk/kern/exception.c
@@ -42,3 +43,32 @@ diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
  	printf("CRASH %s pc 0x%llx lr 0x%llx sp 0x%llx fp 0x%llx far 0x%llx\n", name,
  	    get_saved_state_pc(ss), get_saved_state_lr(ss), get_saved_state_sp(ss), fp,
  	    (uint64_t)saved_state64(ss)->far);
+diff --git a/osfmk/kern/ipc_tt.c b/osfmk/kern/ipc_tt.c
+--- a/osfmk/kern/ipc_tt.c
++++ b/osfmk/kern/ipc_tt.c
+@@ -1426,6 +1426,12 @@
+ 	} else {
+ 		name = MACH_PORT_NULL;
+ 	}
++	{
++		static int n;
++		if (n++ < 12) {
++			printf("SWEET TSD: mach_reply_port -> 0x%x\n", (unsigned)name);
++		}
++	}
+ 	return name;
+ }
+ 
+@@ -1463,6 +1469,12 @@
+ 		ip_mq_unlock(port);
+ 	} else {
+ 		name = MACH_PORT_NULL;
++	}
++	{
++		static int n;
++		if (n++ < 12) {
++			printf("SWEET TSD: thread_get_special_reply_port -> 0x%x\n", (unsigned)name);
++		}
+ 	}
+ 	return name;
+ }
